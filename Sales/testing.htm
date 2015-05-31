@@ -1,0 +1,41 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<script src="http://code.highcharts.com/highcharts.js"></script>
+<script src="http://code.highcharts.com/modules/data.js"></script>
+
+        
+      <script type="text/javascript">
+       $(function () {     
+        Highcharts.setOptions({
+    chart: {
+        type: 'column'
+    }
+});
+
+$('#container4').highcharts({
+    data: {
+        googleSpreadsheetKey: '18jFq7JiZI4wfj0SOMZh3fii1lquGF7NWJnmoFsXNJbM',
+        startColumn: 0,
+        endColumn: 5,
+        startRow: 0
+    },
+    xAxis: {
+        labels: {
+            rotation: 90
+        }
+    },
+    title: {
+        text: 'Data from a Google spreadsheet'
+    }
+});
+       }); 
+        </script>
+ 
+    <div id="container4"></div>    
+        
+        </head>       
+
+
+
+

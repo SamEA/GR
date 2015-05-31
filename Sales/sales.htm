@@ -1,0 +1,436 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>Gourmet Republik</title>
+       <!-- Bootstrap Core CSS -->
+    <link href="css/bootstrap.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <link href="css/modern-business.css" rel="stylesheet">
+      <!-- Custom CSS -->
+    <link href="css/custom.css" rel="stylesheet">
+
+    <!-- Custom Fonts -->
+    <link href="font-awesome/css/font-awesome.css" rel="stylesheet" type="text/css">
+
+		<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
+		<style type="text/css">
+${demo.css}
+		</style>
+		<script type="text/javascript">
+            
+$(function () {
+    
+    
+    Highcharts.setOptions({
+        lang: {
+            thousandsSep: ',',
+            decimalPoint: '.'
+        }
+    });
+    
+    
+    $('#container').highcharts({
+    
+             
+chart: {
+            type: 'line'
+        },
+        title: {
+            text: 'Weekly Sales by Hour' // Title for the chart
+        },
+        yAxis: {
+            min: 0, // Lowest value to show on the yAxis
+            title: {
+                text: 'Unit Sold' // Title for the yAxis
+            }
+        },
+        legend: {
+            enabled: true // Enable/Disable the legend
+        },
+         tooltip: {
+             valueDecimals: 2,
+            valuePrefix: '$',
+            valueSuffix: ' AUD'
+        //pointFormat: "Value: ${point.y:,.0f} "
+    },
+     
+
+        data: {
+            // https://docs.google.com/spreadsheets/d/1VY90Op4B3P3UjCXN21DBNnV5XfZC79E8Mqu7Tf3Zhio/pubhtml
+            googleSpreadsheetKey: '1VY90Op4B3P3UjCXN21DBNnV5XfZC79E8Mqu7Tf3Zhio',
+            switchRowsAndColumns: true,
+        startColumn: 0,
+        endColumn:12 ,
+        startRow: 3,
+        endRow:10
+        }
+
+    });
+    
+    // Weekly Pasta Revenue https://docs.google.com/spreadsheets/d/1v33QMtjtJg4yYQ_UmRAutmK2SU3vCjNjSiHUREh1Koo/pubhtml
+         
+    $('#container2').highcharts({
+    
+             
+chart: {
+            type: 'line'
+        },
+        title: {
+            text: 'Weekly Revenue Pasta' // Title for the chart
+        },
+        yAxis: {
+            min: 0, // Lowest value to show on the yAxis
+            title: {
+                text: 'Revenue' // Title for the yAxis
+            }
+        },
+        legend: {
+            enabled: true // Enable/Disable the legend
+        },
+         tooltip: {
+             valueDecimals: 2,
+            valuePrefix: '$',
+           // valueSuffix: ' AUD'
+        //pointFormat: "Value: ${point.y:,.0f} "
+    },
+     
+
+        data: {
+    // Weekly Pasta Revenue https://docs.google.com/spreadsheets/d/1v33QMtjtJg4yYQ_UmRAutmK2SU3vCjNjSiHUREh1Koo/pubhtml
+            googleSpreadsheetKey: '1v33QMtjtJg4yYQ_UmRAutmK2SU3vCjNjSiHUREh1Koo',
+            switchRowsAndColumns: true,
+        startColumn: 0,
+        endColumn:6 ,
+        startRow: 0,
+        endRow:9
+        }
+    })
+    });
+    
+$(function () {    
+    $('#container3').highcharts({
+    
+        
+chart: {
+    zoomType: 'xy',
+            type: 'line'
+        },
+        title: {
+            text: 'Weekly Revenue Meals' // Title for the chart
+        },
+        yAxis: {
+            min: 0, // Lowest value to show on the yAxis
+            title: {
+                text: 'Revenue' // Title for the yAxis
+            }
+        },
+        legend: {
+            enabled: true // Enable/Disable the legend
+        },
+         tooltip: {
+             valueDecimals: 2,
+            valuePrefix: '$',
+           // valueSuffix: ' AUD'
+        //pointFormat: "Value: ${point.y:,.0f} "
+    },
+     
+
+        data: {
+    // Weekly Meals Revenue https://docs.google.com/spreadsheets/d/1EOfr_qYhns-XEw_hRx0jYsPNCh3EVrvozzVCI6lWLxc/pubhtml
+            //              https://docs.google.com/spreadsheets/d/1EOfr_qYhns-XEw_hRx0jYsPNCh3EVrvozzVCI6lWLxc/pubhtml
+            googleSpreadsheetKey: '1EOfr_qYhns-XEw_hRx0jYsPNCh3EVrvozzVCI6lWLxc',
+            switchRowsAndColumns: true,
+        startColumn: 0,
+        endColumn:6 ,
+        startRow: 0,
+        endRow:18
+        }
+
+    });
+    
+    $('#container4').highcharts({
+    
+        
+chart: {
+    zoomType: 'xy',
+            type: 'line'
+        },
+        title: {
+            text: 'Weekly Revenue Pizza' // Title for the chart
+        },
+        yAxis: {
+            min: 0, // Lowest value to show on the yAxis
+            title: {
+                text: 'Revenue' // Title for the yAxis
+            }
+        },
+        legend: {
+            enabled: true // Enable/Disable the legend
+        },
+         tooltip: {
+             valueDecimals: 2,
+            valuePrefix: '$',
+           // valueSuffix: ' AUD'
+        //pointFormat: "Value: ${point.y:,.0f} "
+    },
+     
+
+        data: {
+    // Weekly Pizza Revenue     https://docs.google.com/spreadsheets/d/1ZQOTnHAKcLfq0-_idTJ3jzXua2-tyzNX9DpbxXiYpOM/pubhtml
+
+            googleSpreadsheetKey: '1ZQOTnHAKcLfq0-_idTJ3jzXua2-tyzNX9DpbxXiYpOM',
+            switchRowsAndColumns: true,
+        startColumn: 0,
+        endColumn:6 ,
+        startRow: 0,
+        endRow:7
+        }
+
+    });
+    
+    
+    
+     $('#container5').highcharts({
+    
+        
+chart: {
+    zoomType: 'xy',
+            type: 'line'
+        },
+        title: {
+            text: 'Weekly Revenue Pies' // Title for the chart
+        },
+        yAxis: {
+            min: 0, // Lowest value to show on the yAxis
+            title: {
+                text: 'Revenue' // Title for the yAxis
+            }
+        },
+        legend: {
+            enabled: true // Enable/Disable the legend
+        },
+         tooltip: {
+             valueDecimals: 2,
+            valuePrefix: '$',
+           // valueSuffix: ' AUD'
+        //pointFormat: "Value: ${point.y:,.0f} "
+    },
+     
+
+        data: {
+    // Weekly Pies Revenue        https://docs.google.com/spreadsheets/d/1Lw4XsYk5dzhfwiQtSgZEEgkmRiu86x490zfE2_UASNw/pubhtml
+
+            googleSpreadsheetKey: '1Lw4XsYk5dzhfwiQtSgZEEgkmRiu86x490zfE2_UASNw',
+            switchRowsAndColumns: true,
+        startColumn: 0,
+        endColumn:6 ,
+        startRow: 0,
+        endRow:9
+        }
+
+    });
+    
+    
+    
+    
+     $('#container6').highcharts({
+    
+        
+chart: {
+    zoomType: 'xy',
+            type: 'line'
+        },
+        title: {
+            text: 'Weekly Revenue Tarts' // Title for the chart
+        },
+        yAxis: {
+            min: 0, // Lowest value to show on the yAxis
+            title: {
+                text: 'Revenue' // Title for the yAxis
+            }
+        },
+        legend: {
+            enabled: true // Enable/Disable the legend
+        },
+         tooltip: {
+             valueDecimals: 2,
+            valuePrefix: '$',
+           // valueSuffix: ' AUD'
+        //pointFormat: "Value: ${point.y:,.0f} "
+    },
+     
+
+        data: {
+    // Weekly Tarts Revenue https://docs.google.com/spreadsheets/d/1L4QLqUV60xX_D2auhqRKxSfN0Mf-8aedBVcI4uBf-5E/pubhtml
+
+
+            googleSpreadsheetKey: '1L4QLqUV60xX_D2auhqRKxSfN0Mf-8aedBVcI4uBf-5E',
+            switchRowsAndColumns: true,
+        startColumn: 0,
+        endColumn:6 ,
+        startRow: 0,
+        endRow:5
+        }
+
+    });
+    
+    $('#container7').highcharts({
+    
+        
+chart: {
+    zoomType: 'xy',
+            type: 'line'
+        },
+        title: {
+            text: 'Weekly Revenue Cakes' // Title for the chart
+        },
+        yAxis: {
+            min: 0, // Lowest value to show on the yAxis
+            title: {
+                text: 'Revenue' // Title for the yAxis
+            }
+        },
+        legend: {
+            enabled: true // Enable/Disable the legend
+        },
+         tooltip: {
+             valueDecimals: 2,
+            valuePrefix: '$',
+           // valueSuffix: ' AUD'
+        //pointFormat: "Value: ${point.y:,.0f} "
+    },
+     
+
+        data: {
+    // Weekly Cakes Revenue https://docs.google.com/spreadsheets/d/1EiF_qNDEc1_IP4zvhoDsLFt9cUalbrGFlPj_P7qibkQ/pubhtml
+
+
+            googleSpreadsheetKey: '1EiF_qNDEc1_IP4zvhoDsLFt9cUalbrGFlPj_P7qibkQ',
+            switchRowsAndColumns: true,
+        startColumn: 0,
+        endColumn:6 ,
+        startRow: 0,
+        endRow:20
+        }
+
+    });
+    
+    $('#container8').highcharts({
+    
+        
+chart: {
+    zoomType: 'xy',
+            type: 'line'
+        },
+        title: {
+            text: 'Weekly Revenue Petites' // Title for the chart
+        },
+        yAxis: {
+            min: 0, // Lowest value to show on the yAxis
+            title: {
+                text: 'Revenue' // Title for the yAxis
+            }
+        },
+        legend: {
+            enabled: true // Enable/Disable the legend
+        },
+         tooltip: {
+             valueDecimals: 2,
+            valuePrefix: '$',
+           // valueSuffix: ' AUD'
+        //pointFormat: "Value: ${point.y:,.0f} "
+    },
+     
+
+        data: {
+    // Weekly Petites Revenue https://docs.google.com/spreadsheets/d/1g6liKyuIMOFPe_USoiRQq22jM37W1dI5AMmJjW1q4Cc/pubhtml
+
+
+            googleSpreadsheetKey: '1g6liKyuIMOFPe_USoiRQq22jM37W1dI5AMmJjW1q4Cc',
+            switchRowsAndColumns: true,
+        startColumn: 0,
+        endColumn:6 ,
+        startRow: 0,
+        endRow:39
+        }
+
+    });
+    });
+		</script>
+	</head>
+	<body>
+  
+     <!-- Navigation -->
+    <nav class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+        <div class="container">
+            <!-- Brand and toggle get grouped for better mobile display -->
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="index.html">Gourmet Republik</a>
+            </div>
+            <!-- Collect the nav links, forms, and other content for toggling -->
+            <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+                <ul class="nav navbar-nav navbar-right">
+                 <li>
+                        <a href="sales.htm">Sales</a>
+                    </li>
+                    <li>
+                        <a href="meals.htm">Meals</a>
+                    </li>
+                                       
+                    <li>
+                        <a href="pizza.htm">Pasta</a>
+                    </li>  
+                    <li>
+                        <a href="pasta.htm">Pizza</a>
+                    </li>
+                    <li>
+                        <a href="piesandquiches.htm">Pies and Quiches</a>
+                    </li>
+                      <li>
+                        <a href="tarts.htm">Sweet Tarts</a>
+                    </li>
+                   
+                     <li>
+                        <a href="cakes.htm">Cakes</a>
+                    </li>
+                     <li>
+                        <a href="petites.htm">Petites</a>
+                    </li> 
+                  
+                    
+                </ul>
+            </div>
+            <!-- /.navbar-collapse -->
+        </div>
+        <!-- /.container -->
+    </nav>
+    
+ <script src="js/highcharts.js"></script>
+<script src="js/modules/data.js"></script>
+<script src="js/modules/exporting.js"></script>
+
+<!-- Additional files for the Highslide popup effect -->
+<script type="text/javascript" src="http://www.highcharts.com/media/com_demo/highslide-full.min.js"></script>
+<script type="text/javascript" src="http://www.highcharts.com/media/com_demo/highslide.config.js" charset="utf-8"></script>
+<link rel="stylesheet" type="text/css" href="http://www.highcharts.com/media/com_demo/highslide.css" />
+
+
+<div id="container" style="min-width: 310px; height: 400px; margin: 0 auto"></div>
+<div id="container2" style="min-width: 310px; height: 400px; margin: 0 auto"></div>
+<div id="container3" style="min-width: 310px; height: 400px; margin: 0 auto"></div>
+<div id="container4" style="min-width: 310px; height: 400px; margin: 0 auto"></div>
+<div id="container5" style="min-width: 310px; height: 400px; margin: 0 auto"></div>
+<div id="container6" style="min-width: 310px; height: 400px; margin: 0 auto"></div>
+<div id="container7" style="min-width: 310px; height: 400px; margin: 0 auto"></div>
+<div id="container8" style="min-width: 310px; height: 400px; margin: 0 auto"></div>
+
+	</body>
+</html>

@@ -1,0 +1,52 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>Highcharts Example</title>
+
+		<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
+		<style type="text/css">
+${demo.css}
+		</style>
+    
+		<script type="text/javascript">
+    
+$(function () {
+    // Create the chart            
+    //    https://docs.google.com/spreadsheets/d/18VDA2twrYn-uJqL569-wjJEJ5CGxxr1eaS7YwQTpLeo/edit?usp=sharing
+       // https://docs.google.com/spreadsheets/d/18VDA2twrYn-uJqL569-wjJEJ5CGxxr1eaS7YwQTpLeo/edit?usp=sharing
+    //   https://docs.google.com/spreadsheets/d/0AoIaUO7wH1HwdENPcGVEVkxfUDJkMmFBcXMzOVVPdHc/edit?usp=sharing
+    //   https://docs.google.com/spreadsheets/d/1fsIHUmwdsKqWPZcauUJhdCxC5Yuxe1nf0cUBzhDkLbs/edit?usp=sharing
+    
+
+    $('#container').highcharts({
+
+      
+
+        data: {
+            googleSpreadsheetKey: '1wgV7ss9XeGKY704KFKH9AAAI9yvCjagsvb8sJ4y_rMk',
+        startColumn: 0,
+        endColumn:9 ,
+        startRow: 0,
+        endRow:7
+        }
+
+    });
+});
+           
+		</script>
+	</head>
+	<body>
+<script src="js/highcharts.js"></script>
+<script src="js/modules/data.js"></script>
+<script src="js/modules/exporting.js"></script>
+
+<!-- Additional files for the Highslide popup effect -->
+<script type="text/javascript" src="http://www.highcharts.com/media/com_demo/highslide-full.min.js"></script>
+<script type="text/javascript" src="http://www.highcharts.com/media/com_demo/highslide.config.js" charset="utf-8"></script>
+<link rel="stylesheet" type="text/css" href="http://www.highcharts.com/media/com_demo/highslide.css" />
+
+<div id="container" style="min-width: 310px; height: 400px; margin: 0 auto"></div>
+
+	</body>
+</html>
