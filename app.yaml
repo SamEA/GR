@@ -40,9 +40,9 @@ handlers:
   upload: static/(.*\.htc)
  
 - url: /(.*\.html)
-  mime_type: text/html
+  mime_type: text/htm
   static_files: static/\1
-  upload: static/(.*\.html)
+  upload: static/(.*\.htm)
   expiration: "1h"
  
 - url: /(.*\.ico)
@@ -171,17 +171,17 @@ handlers:
  
 # index files
 - url: /(.+)/
-  static_files: static/\1/index.html
-  upload: static/(.+)/index.html
+  static_files: static/\1/sales.htm
+  upload: static/(.+)/sales.htm
   expiration: "15m"
  
 - url: /(.+)
-  static_files: static/\1/index.html
-  upload: static/(.+)/index.html
+  static_files: static/\1/sales.htm
+  upload: static/(.+)/sales.htm
   expiration: "15m"
  
 # site root
 - url: /
-  static_files: static/index.html
-  upload: static/index.html
+  static_files: static/index.htm
+  upload: static/sales.htm
   expiration: "15m"
