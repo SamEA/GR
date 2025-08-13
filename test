@@ -1,0 +1,375 @@
+mport asyncio
+import logging
+import time
+from collections.abc import Callable
+#samstart
+import queue
+import threading
+#samend
+
+from lib.motionplatform.util.messageparser import decode_motor_status, get_motor_status_from_position_message
+from shared.constants import DEFAULT_MSG_INTERVAL
+
+from ..motionprofile.motionprofile import MotionProfile
+from .constants.platformconstants import DEFAULT_TRUE_NORTH_OFFSET
+from .motionplatformconnectionproxy import MotionPlatformConnectionProxy
+from .motionplatformcontroller import RESET_POS_DF, RESET_POS_ZERO_DF, MotionPlatformController
+from .motionplatformmessagerouter import PlatformMessageRouter
+
+
+class MotionPlatform:
+    def __init__(
+        self,
+        on_transmit_callbacks=None,
+        on_transmit_complete_callback=None,
+        on_receive_callback=None,
+        on_position_receive_callback=None,
+        platform_alive_callback=None,
+        platform_dead_callback=None,
+        toggle_fields: Callable = None,
+        cancel_callback=None,
+    ):
+        self.logger = logging.getLogger(__name__)
+        self.on_position_receive_callback = on_position_receive_callback
+        self.message_router = PlatformMessageRouter(
+            on_receive=on_receive_callback, on_position=self.on_position_rx_callback
+        )
+        self.connection_proxy = MotionPlatformConnectionProxy(self.message_router)
+        self.controller = MotionPlatformController(
+            on_transmit_callbacks=on_transmit_callbacks,
+            connection_proxy=self.connection_proxy,
+            cancel_callback=cancel_callback,
+        )
+
+        self.stop_thread = False
+        self.platform_alive = False
+        self.true_north_offset = DEFAULT_TRUE_NORTH_OFFSET
+        self.heading_offset = 0.0
+        self.loop = None
+        #samstart
+        self.transmit_lock = threading.Lock()
+        self.gui_queue = queue.Queue()
+        self.transmit_thread = None
+        self.gui_task = None
+        # This event controls whether the transmitter loop is actively sending data or paused.
+        self._transmit_active = threading.Event()
+        #samend
+
+        self.on_receive_callback = on_receive_callback
+        self.on_transmit_complete_callback = on_transmit_complete_callback
+        self.platform_alive_callback = platform_alive_callback
+        self.platform_dead_callback = platform_dead_callback
+        self.toggle_fields = toggle_fields
+
+    def on_position_rx_callback(self, msg):
+        # Handle a message from the platform
+        for status in get_motor_status_from_position_message(msg):
+            decoded_status_letter, _ = decode_motor_status(int(status, 16))
+            if decoded_status_letter == "F":
+                if not self.log_abort_once:
+                    self.log_abort_once = True
+                    self.logger.error("Detected Motion Platform Fault. Aborting")
+                self.controller.STOP_NOW()
+
+        # And also pass it on to whoever is above us
+        if self.on_position_receive_callback:
+            self.on_position_receive_callback(msg)
+
+    def set_ip(self, ip):
+        """Set the platform's ip address"""
+        self.connection_proxy.set_ip(ip)
+        self.platform_dead_callback()
+
+    def set_port(self, port):
+        """Set the platform's port number"""
+        self.connection_proxy.set_port(port)
+        self.platform_dead_callback()
+
+    def set_serial_comport(self, port):
+        self.connection_proxy.set_comport(port)
+        self.platform_dead_callback()
+
+    def toggle_small_platform(self):
+        self.controller.old_motion_platform = True
+        self.connection_proxy.close_connection()
+        self.platform_dead_callback()
+
+    def toggle_big_platform(self):
+        self.connection_proxy.close_connection()
+        self.controller.old_motion_platform = False
+        self.platform_dead_callback()
+
+    def set_heading_offset(self, offset):
+        self.heading_offset = offset
+        self.controller.set_heading_offset(offset)
+
+    def set_true_north_offset(self, offset):
+        self.controller.set_true_north_offset(offset)
+        self.true_north_offset = offset
+
+    def shutdown(self):
+        #samstart
+        # Cleanly stop the transmitter thread and the GUI handler task
+        self.stop_motion_platform() # Pause the loop
+        self.stop_thread = True # Signal the thread to exit
+        self._transmit_active.set() # Wake up the thread if it's waiting, so it can see the stop_thread flag
+        if self.gui_task:
+            self.gui_task.cancel()
+        #samend
+        self.task.cancel()
+
+    async def attempt_connection(self):
+        self.toggle_fields(False)
+        self.log_abort_once = False
+        success = await self.connection_proxy.attempt_connection()
+        self.toggle_fields(True)
+        return success
+
+    async def close_connection(self):
+        self.connection_proxy.close_connection()
+        if self.platform_alive and self.platform_dead_callback:
+            self.platform_dead_callback()
+
+    async def run(self):
+        self.loop = asyncio.get_running_loop()
+        self.connection_proxy.loop = self.loop
+        #samstart
+        # Start a background task to process messages from the transmitter thread
+        self.gui_task = asyncio.create_task(self._gui_update_handler())
+        # Start the single, persistent transmitter thread
+        self._start_transmit_thread()
+        #samend
+        self.task = asyncio.create_task(self.begin_status_check())
+        await self.task
+
+    #samstart
+    async def _gui_update_handler(self):
+        """
+        Handles messages put on the queue from other threads.
+        This allows thread-safe communication with the asyncio event loop.
+        """
+        self.logger.info("Starting GUI update handler.")
+        while True:
+            try:
+                # Use run_in_executor to call the blocking queue.get() without
+                # blocking the main asyncio event loop.
+                message = await self.loop.run_in_executor(
+                    None, self.gui_queue.get
+                )
+
+                if message == "transmit_complete":
+                    self.logger.debug("Received transmit_complete message from worker thread.")
+                    if self.on_transmit_complete_callback:
+                        # Safely await the async callback from the main loop
+                        await self.on_transmit_complete_callback()
+                else:
+                    self.logger.warning(f"Unknown message in gui_queue: {message}")
+
+                self.gui_queue.task_done()
+
+            except asyncio.CancelledError:
+                self.logger.info("GUI update handler task cancelled.")
+                break
+            except Exception:
+                self.logger.exception("Error in GUI update handler.")
+                # Prevent a tight loop in case of continuous errors
+                await asyncio.sleep(1)
+    #samend
+
+    async def begin_status_check(self):
+        """Query the platform every 3 seconds to check if we receive a message back"""
+        while True:
+            if self.message_router.get_received_message():
+                self.message_router.unset_received_message()
+                continue
+
+            # send position query message and check for a response
+            self.controller.send_request_position_command()
+            await asyncio.sleep(0.05)
+
+            if not self.message_router.get_received_message():
+                # we have not received a response from the platform
+                # we assume we are not connected to the platform
+                if self.platform_alive and self.platform_dead_callback:
+                    # the platform was last reported alive
+                    # call platform dead callback
+                    self.platform_dead_callback()
+                # update platform status
+                self.platform_alive = False
+                continue
+
+            # we have received a message from the platform
+            if not self.platform_alive and self.platform_alive_callback:
+                # the platform was last reported as dead
+                # call the platform alive callback
+                self.platform_alive_callback()
+
+            self.platform_alive = True
+            self.message_router.unset_received_message()
+            await asyncio.sleep(3)
+
+    def get_msg_interval(self):
+        return DEFAULT_MSG_INTERVAL
+
+    def set_message_queue(self, dataframe):
+        """Load a dataframe to be transmitted to the platform.
+
+        Parameters:
+        dataframe (pd.DataFrame): A dataframe containing positions with time delta indices.
+        The indices specify the frequency of the transmissions.
+        e.g.
+                                  x    y    z  yaw   pitch     roll
+        time
+        0 days 00:00:00         0.0  0.0  0.0  0.0  0.0000  0.00000
+        0 days 00:00:00.050000  0.0  0.0  0.0  0.0 -0.0079 -0.05563
+        ...                     ...  ...  ...  ...     ...      ...
+        """
+        self.controller.set_xyz_ypr_queue(dataframe)
+        self.start_time = time.perf_counter()
+        self.next_transmission_time = 0
+
+    async def reset_pos(self, pos=RESET_POS_DF, zero=False, duration=5, speed=30):
+        """Reset the position of the motion platform
+
+        Parameters:
+        pos (dataframe): dataframe specifying the x,y,z,y,p,r target position. defaults to 0,150,0,0,0,0
+        zero (bool): set target position to all zeros (0,0,0,0,0,0)
+        duration (int): the number of seconds to transmit the reset position to the platform
+                        i.e. 5 => for the next 5 seconds transmit this position
+        """
+        if zero:
+            pos = RESET_POS_ZERO_DF
+
+        profile = MotionProfile.create_repeated_motion_profile(pos, duration, freq=0.05)
+
+        self.controller.send_speed_percent_cmd(speed)
+        self.set_message_queue(profile)
+
+        return profile
+
+    def set_motion_platform_speed_percent(self, speed_percent):
+        """Set the speed of the platform as a percentage of its maximum speed"""
+        self.controller.send_speed_percent_cmd(speed_percent)
+
+    #samstart
+    async def _async_send_move_command(self):
+        """
+        A coroutine to safely call the controller's send method from the main event loop.
+        This is necessary because the underlying socket transport is not thread-safe.
+        """
+        return self.controller.send_move_command()
+
+    def _start_transmit_thread(self):
+        """Starts the single, persistent transmitter thread if it's not already running."""
+        if self.transmit_thread is None:
+            self.logger.info("Creating and starting persistent transmitter thread.")
+            self.stop_thread = False
+            self.transmit_thread = threading.Thread(target=self._transmit_loop, daemon=True)
+            self.transmit_thread.start()
+
+    def start_transmitting(self):
+        """
+        Activates the transmitter loop, allowing it to start sending data.
+        """
+        self.log_abort_once = False
+        self.logger.info("Activating transmitter.")
+        self._transmit_active.set()
+
+
+    def _transmit_loop(self):
+        """
+        This function runs in a separate thread. It contains the timing-critical
+        loop for sending move commands to the motion platform at a precise interval.
+        """
+        SLEEP_MARGIN = 0.015  # 15ms to start
+        self.logger.info("Entering persistent transmitter loop.")
+
+        while not self.stop_thread:
+            # This is the key change. The thread waits here efficiently until
+            # start_transmitting() is called. It consumes no CPU while waiting.
+            self._transmit_active.wait()
+
+            # If the thread was woken up just to be stopped, exit the loop.
+            if self.stop_thread:
+                break
+            
+            # Lock to ensure that even if stop is called, this iteration completes.
+            with self.transmit_lock:
+                self.start_time = time.perf_counter()
+                self.controller.last_transmit_time = None
+
+                # This inner loop runs only while the _transmit_active event is set.
+                while self._transmit_active.is_set():
+                    if not self.loop:
+                        self.logger.error("Event loop not available for thread-safe call. Pausing transmitter.")
+                        self._transmit_active.clear()
+                        break
+                    
+                    # Safely call the send command on the main event loop from this thread.
+                    future = asyncio.run_coroutine_threadsafe(self._async_send_move_command(), self.loop)
+                    # Add a timeout to future.result() to prevent indefinite blocking if the main loop is busy
+                    try:
+                        self.next_transmission_time = future.result(timeout=1.0)
+                    except (asyncio.TimeoutError, TimeoutError):
+                        self.logger.warning("Getting next transmission time from main loop timed out.")
+                        continue
+
+
+                    if not self.next_transmission_time:
+                        # There are no more queued packets.
+                        self.next_transmission_time = time.perf_counter() - self.start_time + DEFAULT_MSG_INTERVAL
+
+                        if self.on_transmit_complete_callback:
+                            self.gui_queue.put("transmit_complete")
+
+                    # # --- High-Precision Timing Loop ---
+                    # next_time = self.next_transmission_time + self.start_time
+                    # sleep_time = next_time - time.perf_counter() - SLEEP_MARGIN
+                    # if sleep_time > 0:
+                    #     time.sleep(sleep_time)
+
+                    # if (next_time - time.perf_counter()) < 0:
+                    #     SLEEP_MARGIN += 0.005
+                    #     self.logger.info(f"Increasing sleep margin sleep_calc:{sleep_time} margin now: {SLEEP_MARGIN}")
+                    #     if SLEEP_MARGIN > DEFAULT_MSG_INTERVAL:
+                    #         self.logger.error("Timing margin exceeds interval. Aborting.")
+                    #         self.controller.STOP_NOW()
+
+                    # while (next_time - time.perf_counter()) > 0:
+                    #     pass
+
+                    # --- High-Precision Timing Loop ---
+                    # Calculate the absolute time for the next transmission based on the start time.
+                    next_time = self.start_time + self.next_transmission_time
+
+                    # Calculate the duration to sleep.
+                    # We subtract a small, fixed margin to wake up slightly early for final adjustments,
+                    # but we avoid the busy-wait loop.
+                    sleep_duration = next_time - time.perf_counter()
+
+                    if sleep_duration > 0:
+                        time.sleep(sleep_duration)
+
+                    # Optional: Log if we are consistently late, which indicates a systemic issue.
+                    # This is more informative than the dynamically growing margin.
+                    INTERVAL_ERROR_MARGIN = 0.002
+                    if time.perf_counter() > next_time+ INTERVAL_ERROR_MARGIN:
+                        self.logger.warning(f"Transmit loop is late by {time.perf_counter() - next_time:.4f} seconds.")
+        
+        self.logger.info("Exited persistent transmitter loop.")
+
+    def stop_motion_platform(self):
+        """
+        Pauses the transmitter loop, preventing it from sending data.
+        This is non-blocking and does not cause deadlocks.
+        """
+        if self._transmit_active.is_set():
+            self.logger.debug("Pausing the motion platform transmitter.")
+            self._transmit_active.clear()
+            # Safely schedule the park command on the main event loop
+            if self.loop:
+                self.loop.call_soon_threadsafe(self.controller.send_park_command)
+    #samend
+
+    def send_custom_command(self, command):
+        self.controller.send_command(command)
