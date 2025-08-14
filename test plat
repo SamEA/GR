@@ -1,0 +1,307 @@
+import dearpygui.dearpygui as dpg
+import asyncio
+import socket
+
+# --- Configuration ---
+# We now have two ports for listening and one for the TCP health check.
+DEFAULT_LISTENING_HOST = '127.0.0.1'
+DEFAULT_LISTENING_PORT = 9998
+TCP_HEALTH_CHECK_PORT = 80 # Port the other app uses for its initial connection test.
+DEFAULT_TARGET_HOST = '127.0.0.1'
+DEFAULT_TARGET_PORT = 9999
+
+MAX_LOG_MESSAGES = 200
+
+# --- State Management ---
+server_state = {
+    "udp_transport": None,
+    "udp_task": None,
+    "tcp_server": None, # To hold the asyncio.Server object for the TCP listener
+}
+# A single queue for all async commands from the GUI
+control_queue = asyncio.Queue()
+
+# --- Logging Helper ---
+def _add_log_message(message: str, color=None):
+    """A centralized, safe function to add messages to the GUI log."""
+    if not dpg.is_dearpygui_running() or not dpg.does_item_exist("log_group"):
+        return
+    try:
+        # Auto-scroll by removing old messages
+        children = dpg.get_item_children("log_group", 1)
+        if len(children) >= MAX_LOG_MESSAGES:
+            dpg.delete_item(children[0])
+        
+        if color:
+            dpg.add_text(message, parent="log_group", color=color)
+        else:
+            dpg.add_text(message, parent="log_group")
+    except Exception as e:
+        # This can happen if the GUI is being shut down
+        print(f"Error updating GUI log: {e}")
+
+# --- Asyncio UDP Server Protocol (For Listening) ---
+class UDPListenProtocol(asyncio.DatagramProtocol):
+    """
+    This protocol now sends an acknowledgment back for every datagram received.
+    """
+    def connection_made(self, transport):
+        # Store the transport for later use in sending replies
+        self.transport = transport 
+        server_state["udp_transport"] = transport
+        server_addr = transport.get_extra_info('sockname')
+        log_msg = f"[INFO] UDP Listener started on {server_addr[0]}:{server_addr[1]}"
+        _add_log_message(log_msg, color=(0, 255, 0))
+        print(log_msg)
+
+    def datagram_received(self, data, addr):
+        client_ip, client_port = addr
+        try:
+            message = data.decode('utf-8').strip()
+        except UnicodeDecodeError:
+            message = "Received non-UTF-8 data"
+            
+        log_entry = f"[{client_ip}:{client_port}]> {message}"
+        _add_log_message(log_entry)
+
+        # --- FIX: Send an acknowledgment response back to the client ---
+        response_message = f"Acknowledged: {message}"
+        self.transport.sendto(response_message.encode('utf-8'), addr)
+        log_ack = f"[AUTO-REPLY SENT]> Sent acknowledgment to {client_ip}:{client_port}"
+        _add_log_message(log_ack, color=(173, 216, 230)) # Light Blue
+
+    def error_received(self, exc):
+        error_msg = f"[ERROR] UDP Listener error: {exc}"
+        _add_log_message(error_msg, color=(255, 0, 0))
+        print(error_msg)
+
+    def connection_lost(self, exc):
+        log_msg = "[INFO] UDP Listener has stopped."
+        _add_log_message(log_msg, color=(255, 255, 0))
+        print(log_msg)
+
+# --- DearPyGui Application Setup ---
+def setup_gui():
+    """Creates the DearPyGui window and widgets."""
+    with dpg.window(label="Async UDP Bidirectional Tool", tag="main_window"):
+        dpg.add_text("Status: Idle", tag="status_text")
+        dpg.add_separator()
+
+        with dpg.collapsing_header(label="Listener Settings (This App)", default_open=True):
+            with dpg.group(horizontal=True):
+                dpg.add_input_text(label="Listen on IP", default_value=DEFAULT_LISTENING_HOST, tag="listen_ip_input", width=150)
+                dpg.add_input_text(label="UDP Listen Port", default_value=str(DEFAULT_LISTENING_PORT), tag="listen_port_input", width=100)
+            dpg.add_text(f"(Also listens for TCP health check on port {TCP_HEALTH_CHECK_PORT})")
+            with dpg.group(horizontal=True):
+                dpg.add_button(label="Start Listening", tag="start_button", callback=start_listener_callback)
+                dpg.add_button(label="Stop Listening", tag="stop_button", callback=stop_listener_callback, enabled=False)
+
+        with dpg.collapsing_header(label="Sender Settings (Target App)", default_open=True):
+            with dpg.group(horizontal=True):
+                dpg.add_input_text(label="Target IP", default_value=DEFAULT_TARGET_HOST, tag="target_ip_input", width=150)
+                dpg.add_input_text(label="Target Port", default_value=str(DEFAULT_TARGET_PORT), tag="target_port_input", width=100)
+            with dpg.group(horizontal=True):
+                dpg.add_input_text(label="Command", tag="command_input", width=300)
+                dpg.add_button(label="Send Command", callback=send_command_callback)
+
+        dpg.add_separator()
+        dpg.add_text("Message Log:")
+        with dpg.child_window(height=-1, border=True):
+            dpg.add_group(tag="log_group")
+
+# --- Async Functions ---
+async def handle_tcp_health_check(reader, writer):
+    """
+    Callback for the TCP server. It now serves a minimal XML file to satisfy
+    the client's specific GET request for /secure/setuprec.xml.
+    """
+    addr = writer.get_extra_info('peername')
+    log_msg = f"[INFO] TCP health check from {addr[0]}:{addr[1]} received."
+    _add_log_message(log_msg, color=(173, 216, 230))
+    print(log_msg)
+    
+    try:
+        # Read the request line for debugging
+        request_line = await reader.readline()
+        _add_log_message(f"[TCP-DEBUG] Request: {request_line.decode().strip()}")
+        # Read the rest of the headers until the blank line
+        while await reader.readline() != b'\r\n':
+            pass
+    except ConnectionResetError:
+        writer.close()
+        # No need to await wait_closed() here either
+        return
+
+    # --- FIX: Respond with an XML structure the client can parse ---
+    xml_content = (
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<setup>'
+        b'<record>'
+        b'<NUM>00</NUM>'
+        b'<DATA>AQIDBA==</DATA>' # Placeholder Base64 data
+        b'</record>'
+        b'</setup>'
+    )
+    
+    # Construct the HTTP response with correct headers
+    response = (
+        f"HTTP/1.1 200 OK\r\n"
+        f"Content-Type: application/xml; charset=utf-8\r\n"
+        f"Content-Length: {len(xml_content)}\r\n"
+        f"Connection: close\r\n"
+        f"\r\n"
+    ).encode('utf-8') + xml_content
+
+    writer.write(response)
+    await writer.drain()
+
+    # --- FIX: Do not wait for the connection to close, just initiate it. ---
+    # This prevents the event loop from blocking and freezing the GUI.
+    writer.close() 
+
+    print(f"[INFO] Sent HTTP 200 OK with XML content to {addr[0]} and initiated connection close.")
+
+
+async def start_listeners(listen_ip: str, listen_udp_port: int):
+    """Coroutine to start both the UDP and TCP listeners."""
+    loop = asyncio.get_running_loop()
+    try:
+        # Start TCP Health Check Server
+        tcp_server = await asyncio.start_server(
+            handle_tcp_health_check, listen_ip, TCP_HEALTH_CHECK_PORT
+        )
+        server_state["tcp_server"] = tcp_server
+        tcp_addr = tcp_server.sockets[0].getsockname()
+        _add_log_message(f"[INFO] TCP Health Check server running on {tcp_addr[0]}:{tcp_addr[1]}", color=(0, 255, 0))
+        
+        # Start UDP Listener
+        server_state["udp_task"] = loop.create_task(
+            loop.create_datagram_endpoint(
+                UDPListenProtocol, local_addr=(listen_ip, listen_udp_port)
+            )
+        )
+        
+        dpg.set_value("status_text", "Status: Listening (UDP & TCP)")
+        dpg.configure_item("start_button", enabled=False)
+        dpg.configure_item("stop_button", enabled=True)
+    except Exception as e:
+        error_msg = f"Status: Error starting listeners - {e}"
+        _add_log_message(error_msg, color=(255, 0, 0))
+        dpg.set_value("status_text", error_msg)
+        dpg.configure_item("start_button", enabled=True)
+        # Clean up if one part failed
+        if server_state["tcp_server"]:
+            server_state["tcp_server"].close()
+            await server_state["tcp_server"].wait_closed()
+            server_state["tcp_server"] = None
+
+async def send_udp_command(message: str, ip: str, port: int):
+    """Coroutine to send a single UDP command."""
+    loop = asyncio.get_running_loop()
+    try:
+        # Create a temporary endpoint to send the data
+        transport, _ = await loop.create_datagram_endpoint(
+            lambda: asyncio.DatagramProtocol(), remote_addr=(ip, port)
+        )
+        transport.sendto(message.encode('utf-8'))
+        transport.close()
+        log_msg = f"[COMMAND SENT]> Sent '{message}' to {ip}:{port}"
+        _add_log_message(log_msg, color=(255, 165, 0)) # Orange
+        print(log_msg)
+    except Exception as e:
+        error_log = f"[SEND ERROR] Could not send command: {e}"
+        _add_log_message(error_log, color=(255, 0, 0))
+        print(error_log)
+
+async def stop_listeners_task():
+    """Asynchronous task to gracefully stop all listeners without blocking the GUI."""
+    # Stop UDP
+    if server_state["udp_transport"]:
+        server_state["udp_transport"].close()
+        server_state["udp_transport"] = None
+    if server_state["udp_task"]:
+        server_state["udp_task"].cancel()
+        server_state["udp_task"] = None
+    # Stop TCP
+    if server_state["tcp_server"]:
+        server_state["tcp_server"].close()
+        await server_state["tcp_server"].wait_closed()
+        server_state["tcp_server"] = None
+        _add_log_message("[INFO] TCP Health Check server stopped.", color=(255, 255, 0))
+    
+    dpg.set_value("status_text", "Status: Stopped")
+    dpg.configure_item("start_button", enabled=True)
+    dpg.configure_item("stop_button", enabled=False)
+
+# --- GUI Callbacks ---
+def start_listener_callback(sender, app_data, user_data):
+    ip = dpg.get_value("listen_ip_input")
+    try:
+        port = int(dpg.get_value("listen_port_input"))
+    except (ValueError, TypeError):
+        dpg.set_value("status_text", "Status: Invalid Listening Port")
+        return
+    control_queue.put_nowait(("start_listen", (ip, port)))
+
+def stop_listener_callback(sender, app_data, user_data):
+    control_queue.put_nowait(("stop_listen", None))
+
+def send_command_callback(sender, app_data, user_data):
+    ip = dpg.get_value("target_ip_input")
+    message = dpg.get_value("command_input")
+    try:
+        port = int(dpg.get_value("target_port_input"))
+    except (ValueError, TypeError):
+        dpg.set_value("status_text", "Status: Invalid Target Port")
+        return
+    if not message: return
+    control_queue.put_nowait(("send_command", (message, ip, port)))
+
+# --- Main Application Loop ---
+async def main():
+    """Main entry point: sets up GUI and runs the async event loop."""
+    dpg.create_context()
+    setup_gui()
+    dpg.create_viewport(title='Async UDP Bidirectional Tool', width=800, height=600)
+    dpg.setup_dearpygui()
+    dpg.show_viewport()
+    dpg.set_primary_window("main_window", True)
+
+    while dpg.is_dearpygui_running():
+        try:
+            # Check for commands from the GUI without blocking
+            command, data = control_queue.get_nowait()
+            if command == "start_listen":
+                ip, port = data
+                asyncio.create_task(start_listeners(ip, port))
+            
+            elif command == "stop_listen":
+                # --- FIX: Use a non-blocking task for stopping ---
+                asyncio.create_task(stop_listeners_task())
+
+            elif command == "send_command":
+                message, ip, port = data
+                asyncio.create_task(send_udp_command(message, ip, port))
+        except asyncio.QueueEmpty:
+            # This is the normal case when no GUI button has been pressed
+            pass
+        except Exception as e:
+            print(f"Error in main loop: {e}")
+
+        # Render the GUI frame and yield control to the asyncio loop
+        dpg.render_dearpygui_frame()
+        await asyncio.sleep(0.001)
+
+    print("Shutting down...")
+    # Final cleanup
+    if server_state["tcp_server"]:
+        server_state["tcp_server"].close()
+    if server_state["udp_task"] and not server_state["udp_task"].done():
+        server_state["udp_task"].cancel()
+    dpg.destroy_context()
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Application terminated by user.")
